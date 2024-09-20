@@ -166,7 +166,7 @@ TEST(analysisTest, test_neighbor_finding)
 
     resizeNeighbors(neighbors, domain.nParticles() * 150);
     findNeighborsSph(x.data(), y.data(), z.data(), h.data(), domain.startIndex(), domain.endIndex(), domain.box(),
-                     domain.focusTree().treeLeaves(), 2, 2, neighbors.data(), nc.data() + domain.startIndex());
+                     domain.octreeProperties().nsView(), 2, 2, neighbors.data(), nc.data() + domain.startIndex());
 
     if (rank == 0)
     {
