@@ -136,3 +136,43 @@ TEST(analysisTest, test_domain_sync_order)
         }
     }
 }
+
+TEST(analysisTest, test_neighbor_finding)
+{
+    auto [rank, numRanks] = initMpi();
+    std::vector<double> x{0.4, -0.4, 0.4, -0.4};
+    std::vector<double> y{0.4, -0.4, 0.4, -0.4};
+    std::vector<double> z{0.4, 0.4, -0.4, -0.4};
+    std::vector<double> h{1, 1, 1, 1};
+    std::vector<double> id{4, 3, 2, 1};
+    std::vector<double> vx{1.7, 1.8, 1.9, 2.0};
+    std::vector<double> vy{2.1, 2.2, 2.3, 2.4};
+    std::vector<double> vz{2.5, 2.6, 2.7, 2.8};
+    std::vector<double> scratch1(x.size());
+    std::vector<double> scratch2(x.size());
+    std::vector<double> scratch3(x.size());
+
+    std::vector<uint64_t> keys(x.size());
+    size_t                bucketSizeFocus = 2;
+    size_t                bucketSize      = 2;
+    float                 theta           = 1.0;
+    cstone::Box<double>   box(-0.5, 0.5, cstone::BoundaryType::periodic);
+    Domain                domain(rank, numRanks, bucketSize, bucketSizeFocus, theta, box);
+
+    domain.sync(keys, x, y, z, h, std::tie(vx, id), std::tie(scratch1, scratch2, scratch3));
+
+    std::vector<cstone::LocalIndex> neighbors;
+    std::vector<unsigned>           nc;
+
+    resizeNeighbors(neighbors, domain.nParticles() * 150);
+    findNeighborsSph(x.data(), y.data(), z.data(), h.data(), domain.startIndex(), domain.endIndex(), domain.box(),
+                     domain.focusTree().treeLeaves(), 2, 2, neighbors.data(), nc.data() + domain.startIndex());
+
+    if (rank == 0)
+    {
+        for (size_t i = 0; i < x.size(); i++)
+        {
+            std::cout << rank << " " << x[i] << " " << y[i] << " " << z[i] << " " << id[i] << " " << nc[i] << std::endl;
+        }
+    }
+}

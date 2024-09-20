@@ -5,9 +5,8 @@
 #include "utils.hpp"
 #include "find_neighbors.hpp"
 
-using KeyType   = uint64_t;
-using Domain    = cstone::Domain<uint64_t, double, cstone::CpuTag>;
-const int ngmax = 150;
+using KeyType = uint64_t;
+using Domain  = cstone::Domain<uint64_t, double, cstone::CpuTag>;
 
 template<typename T>
 inline T sinc(T x)
@@ -100,6 +99,9 @@ std::vector<T> compute_FTLE(Domain domain, std::vector<T> x1, std::vector<T> y1,
     std::vector<T> FTLE(domain.nParticles(), 0.0);
     std::vector<T> V1(domain.nParticles(), 0.0);
 
+    unsigned ng0   = 100;
+    unsigned ngmax = 150;
+
     for (size_t i = domain.startIndex(); i < domain.endIndex(); ++i)
     {
         V1[i] = 1.0 / (numParticles * rho[i]);
@@ -108,9 +110,9 @@ std::vector<T> compute_FTLE(Domain domain, std::vector<T> x1, std::vector<T> y1,
         std::vector<cstone::LocalIndex> neighbors;
         std::vector<unsigned>           nc;
 
-        resizeNeighbors(neighbors, domain.nParticles() * d.ngmax);
+        resizeNeighbors(neighbors, domain.nParticles() * ngmax);
         findNeighborsSph(x1.data(), y1.data(), z1.data(), h1.data(), domain.startIndex(), domain.endIndex(),
-                         domain.box(), domain.focusTree().treeLeaves(), d.ng0, d.ngmax, neighbors.data(),
+                         domain.box(), domain.octreeProperties().nsView(), ng0, ngmax, neighbors.data(),
                          nc.data() + domain.startIndex());
 
         // rab1, rab2 and dist sizes should be number of neighbors
@@ -208,8 +210,8 @@ std::vector<T> compute_FTLE(Domain domain, std::vector<T> x1, std::vector<T> y1,
         Eigen::EigenSolver<Eigen::Matrix<T, 3, 3>> eigensolver(Cmat);
         if (eigensolver.info() != Eigen::Success) abort();
 
-        T maxEigenvalue = std::max(eigensolver.eigenvalues()[0].real(), eigensolver.eigenvalues()[1].real(),
-                                   eigensolver.eigenvalues()[2].real());
+        T maxEigenvalue = std::max({eigensolver.eigenvalues()[0].real(), eigensolver.eigenvalues()[1].real(),
+                                    eigensolver.eigenvalues()[2].real()});
 
         FTLE[i] = std::log(std::sqrt(maxEigenvalue)) / dt;
     }

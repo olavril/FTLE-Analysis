@@ -2,14 +2,19 @@
 
 #include "cstone/findneighbors.hpp"
 
-namespace sph
-{
-
 using cstone::LocalIndex;
 
-template<class Tc, class T, class KeyType>
-void findNeighborsSph(const Tc* x, const Tc* y, const Tc* z, T* h, LocalIndex firstId, LocalIndex lastId,
-                      const cstone::Box<Tc>& box, const cstone::OctreeNsView<Tc, KeyType>& treeView, unsigned ng0,
+template<class T>
+T updateH(unsigned ng0, unsigned nc, T h)
+{
+    constexpr T c0  = 1023.0;
+    constexpr T exp = 1.0 / 10.0;
+    return h * T(0.5) * std::pow(T(1) + c0 * ng0 / T(nc), exp);
+}
+
+template<class T, class KeyType>
+void findNeighborsSph(const T* x, const T* y, const T* z, T* h, LocalIndex firstId, LocalIndex lastId,
+                      const cstone::Box<T>& box, const cstone::OctreeNsView<T, KeyType>& treeView, unsigned ng0,
                       unsigned ngmax, LocalIndex* neighbors, unsigned* nc)
 {
     LocalIndex numWork = lastId - firstId;
@@ -56,8 +61,9 @@ void findNeighborsSfc(size_t startIndex, size_t endIndex, Dataset& d, const csto
 }
 
 template<class T>
-void resizeNeighbors(std::vector<T>& vector, size_t size, double growthRate)
+void resizeNeighbors(std::vector<T>& vector, size_t size)
 {
+    double growthRate       = 1.05;
     size_t current_capacity = vector.capacity();
 
     if (size > current_capacity)
@@ -67,5 +73,3 @@ void resizeNeighbors(std::vector<T>& vector, size_t size, double growthRate)
     }
     vector.resize(size);
 }
-
-} // namespace sph
