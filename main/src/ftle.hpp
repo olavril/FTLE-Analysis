@@ -66,9 +66,8 @@ calculate_kernel_gradient(std::vector<T> distances, std::vector<T> rabx, std::ve
 }
 
 template<typename T>
-T calculate_rab2(T pos2j, T pos2i)
+T rab2_correction(T rab2)
 {
-    T rab2 = pos2j - pos2i;
     if (rab2 > 0.5) { rab2 -= 1.0; }
     else if (rab2 < -0.5) { rab2 += 1.0; }
     return rab2;
@@ -102,47 +101,47 @@ std::vector<T> compute_FTLE(Domain domain, std::vector<T> x1, std::vector<T> y1,
     unsigned ng0   = 100;
     unsigned ngmax = 150;
 
+    std::vector<cstone::LocalIndex> neighbors;
+    std::vector<unsigned>           nc(domain.nParticles());
+
+    resizeNeighbors(neighbors, domain.nParticles() * ngmax);
+    findNeighborsSph(x1.data(), y1.data(), z1.data(), h1.data(), domain.startIndex(), domain.endIndex(), domain.box(),
+                     domain.octreeProperties().nsView(), ng0, ngmax, neighbors.data(), nc.data() + domain.startIndex());
+
     for (size_t i = domain.startIndex(); i < domain.endIndex(); ++i)
     {
         V1[i] = 1.0 / (numParticles * rho[i]);
         // size_t particleID = id[i];
 
-        std::vector<cstone::LocalIndex> neighbors;
-        std::vector<unsigned>           nc;
-
-        resizeNeighbors(neighbors, domain.nParticles() * ngmax);
-        findNeighborsSph(x1.data(), y1.data(), z1.data(), h1.data(), domain.startIndex(), domain.endIndex(),
-                         domain.box(), domain.octreeProperties().nsView(), ng0, ngmax, neighbors.data(),
-                         nc.data() + domain.startIndex());
-
         // rab1, rab2 and dist sizes should be number of neighbors
-        std::vector<T> rab1x(x1.size());
-        std::vector<T> rab1y(x1.size());
-        std::vector<T> rab1z(x1.size());
-        std::vector<T> dist1(x1.size());
+        unsigned       neighborSize = nc[i];
+        std::vector<T> rab1x(neighborSize);
+        std::vector<T> rab1y(neighborSize);
+        std::vector<T> rab1z(neighborSize);
+        std::vector<T> dist1(neighborSize);
 
-        std::vector<T> rab2x(x1.size());
-        std::vector<T> rab2y(x1.size());
-        std::vector<T> rab2z(x1.size());
-        std::vector<T> dist2(x1.size());
+        std::vector<T> rab2x(neighborSize);
+        std::vector<T> rab2y(neighborSize);
+        std::vector<T> rab2z(neighborSize);
+        std::vector<T> dist2(neighborSize);
 
         // TODO: update according to the neighbors.
         // Compute the distance between each particle and all the neighboring particles
-        for (size_t j = 0; j < neighbors.size(); j++)
+        for (size_t j = 0; j < neighborSize; j++)
         {
-            rab1x[j] = x1[neighbors[j]] - x1[j];
-            rab1y[j] = y1[i] - y1[j];
-            rab1z[j] = z1[i] - z1[j];
+            rab1x[j] = x1[i] - x1[neighbors[i * ngmax + j]];
+            rab1y[j] = y1[i] - y1[neighbors[i * ngmax + j]];
+            rab1z[j] = z1[i] - z1[neighbors[i * ngmax + j]];
             dist1[j] = std::sqrt(rab1x[j] * rab1x[j] + rab1y[j] * rab1y[j] + rab1z[j] * rab1z[j]);
         }
 
         // Compute the distance between each particle and all neighbors in the second step
-        // check if we need to correct for the periodic boundary
-        for (size_t j = 0; j < x2.size(); j++)
+        // If the corresponding particles in the second step has already been found, use it
+        for (size_t j = 0; j < neighborSize; j++)
         {
-            rab2x[j] = calculate_rab2(x2[j], x2[i]);
-            rab2y[j] = calculate_rab2(y2[j], y2[i]);
-            rab2z[j] = calculate_rab2(z2[j], z2[i]);
+            rab2x[j] = rab2_correction(x2[i] - x2[neighbors[i * ngmax + j]]);
+            rab2y[j] = rab2_correction(y2[i] - y2[neighbors[i * ngmax + j]]);
+            rab2z[j] = rab2_correction(z2[i] - z2[neighbors[i * ngmax + j]]);
         }
 
         // Sizes of dkV, dist1, rab1x, rab1y, rab1z, h1 should be the same and to the number of neighbors
@@ -152,22 +151,21 @@ std::vector<T> compute_FTLE(Domain domain, std::vector<T> x1, std::vector<T> y1,
         std::vector<T> dkV1(rab1x.size());
         std::vector<T> dkV2(rab1x.size());
 
-        // Compute the gradient of the kernel for all the neighbors and multiply it by the volume of the neighbor you
-        // calculate before. Loop over the neighbors
-        for (size_t j = 0; j < x1.size(); j++)
+        // Compute the gradient of the kernel for all the neighbors and multiply it
+        // with the volume of the neighbor you calculate before. Loop over the neighbors
+        for (size_t j = 0; j < neighborSize; j++)
         {
-            dkV0[j] = std::get<0>(dkV)[j] * V1[j];
-            dkV1[j] = std::get<1>(dkV)[j] * V1[j];
-            dkV2[j] = std::get<2>(dkV)[j] * V1[j];
+            dkV0[j] = std::get<0>(dkV)[j] * V1[neighbors[i * ngmax + j]];
+            dkV1[j] = std::get<1>(dkV)[j] * V1[neighbors[i * ngmax + j]];
+            dkV2[j] = std::get<2>(dkV)[j] * V1[neighbors[i * ngmax + j]];
         }
 
-        // check that the instantiation results in a matrix with zeros.
         Eigen::Matrix<T, 3, 3> Lmat;
         Eigen::Matrix<T, 3, 3> Fmat;
         Eigen::Matrix<T, 3, 3> Cmat;
 
         // Loop over the neighbors
-        for (size_t j = 0; j < x1.size(); j++)
+        for (size_t j = 0; j < neighborSize; j++)
         {
             Lmat(0, 0) += rab1x[j] * dkV0[j];
             Lmat(0, 1) += rab1x[j] * dkV1[j];
@@ -185,7 +183,7 @@ std::vector<T> compute_FTLE(Domain domain, std::vector<T> x1, std::vector<T> y1,
 
         std::vector<T> LdkV(3, 0.0);
         // Loop over the neighbors
-        for (size_t j = 0; j < x1.size(); j++)
+        for (size_t j = 0; j < neighborSize; j++)
         {
             for (int k = 0; k < 3; k++)
             {
