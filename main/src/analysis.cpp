@@ -25,14 +25,18 @@ int main(int argc, char** argv)
 
     const std::string initFile1 = parser.get("--checkpoint1");
     const std::string initFile2 = parser.get("--checkpoint2");
-    int               stepNo    = parser.get("--stepNo", 0);
+    int               stepNo1   = parser.get("--stepNo1", 0);
+    int               stepNo2   = parser.get("--stepNo2", 0);
 
     // read HDF5 checkpoint and decide which steps to process
     auto reader = makeH5PartReader(MPI_COMM_WORLD);
-    reader->setStep(initFile1, stepNo, FileMode::collective);
+    reader->setStep(initFile1, stepNo1, FileMode::collective);
 
-    size_t numParticles  = reader->globalNumParticles(); // total number of particles in the simulation
-    size_t simDimensions = std::cbrt(numParticles);      // dimension of the simulation
+    // read HDF5 checkpoint and decide which steps to process
+    auto reader2 = makeH5PartReader(MPI_COMM_WORLD);
+    reader->setStep(initFile2, stepNo2, FileMode::collective);
+
+    size_t numParticles = reader->globalNumParticles(); // total number of particles in the simulation
 
     std::vector<double>   x(reader->localNumParticles());
     std::vector<double>   y(reader->localNumParticles());
