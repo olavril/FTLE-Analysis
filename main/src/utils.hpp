@@ -3,6 +3,7 @@
 #include <tuple>
 #include <omp.h>
 #include <mpi.h>
+#include <cstdio>
 
 auto initMpi()
 {
